@@ -1,0 +1,11 @@
+{
+  "name": "sweep-and-spray",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Solana batch transfer console — consolidate many wallets into one, or distribute from one wallet to many. Static, client-side only.",
+  "scripts": {
+    "dev": "npx serve .",
+    "build": "echo 'no build step — static site'",
+    "start": "npx serve ."
+  }
+}

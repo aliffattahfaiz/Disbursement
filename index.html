@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sweep &amp; Spray — Solana Wallet Consolidator</title>
+<meta name="description" content="Consolidate many Solana wallets into one, or distribute from one wallet to many. Non-custodial, runs entirely in your browser." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="scanlines" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-mark" width="26" height="26" viewBox="0 0 26 26" fill="none">
+      <path d="M4 8.5L8 4.5H22L18 8.5H4Z" fill="url(#g1)"/>
+      <path d="M4 17.5L8 13.5H22L18 17.5H4Z" fill="url(#g2)"/>
+      <path d="M4 13L8 9H22L18 13H4Z" fill="url(#g3)" opacity="0.85"/>
+      <defs>
+        <linearGradient id="g1" x1="4" y1="6" x2="22" y2="6"><stop stop-color="#9945FF"/><stop offset="1" stop-color="#14F195"/></linearGradient>
+        <linearGradient id="g2" x1="4" y1="15" x2="22" y2="15"><stop stop-color="#9945FF"/><stop offset="1" stop-color="#14F195"/></linearGradient>
+        <linearGradient id="g3" x1="4" y1="11" x2="22" y2="11"><stop stop-color="#9945FF"/><stop offset="1" stop-color="#14F195"/></linearGradient>
+      </defs>
+    </svg>
+    <div class="brand-text">
+      <span class="brand-name">Sweep &amp; Spray</span>
+      <span class="brand-tag">Solana batch transfer console</span>
+    </div>
+  </div>
+
+  <div class="topbar-controls">
+    <div class="field-inline">
+      <label for="network-select">Cluster</label>
+      <select id="network-select">
+        <option value="mainnet-beta">Mainnet Beta</option>
+        <option value="devnet" selected>Devnet</option>
+        <option value="testnet">Testnet</option>
+        <option value="custom">Custom RPC…</option>
+      </select>
+    </div>
+    <input id="custom-rpc" class="field-inline custom-rpc hidden" type="text" placeholder="https://your-rpc-endpoint.com" />
+    <button id="connect-btn" class="btn btn-connect">
+      <span class="dot" id="connect-dot"></span>
+      <span id="connect-label">Connect Wallet</span>
+    </button>
+  </div>
+</header>
+
+<div class="net-banner" id="net-banner">
+  Devnet selected — safe to rehearse full sweeps and drops here before touching mainnet.
+</div>
+
+<section class="flow-wrap" aria-hidden="true">
+  <svg id="flow-consolidate" class="flow-svg" viewBox="0 0 900 220" xmlns="http://www.w3.org/2000/svg">
+    <!-- sources -->
+    <g class="flow-nodes"></g>
+  </svg>
+  <svg id="flow-distribute" class="flow-svg hidden" viewBox="0 0 900 220" xmlns="http://www.w3.org/2000/svg">
+    <g class="flow-nodes"></g>
+  </svg>
+</section>
+
+<nav class="tabs" role="tablist">
+  <button class="tab active" data-tab="consolidate" role="tab" aria-selected="true">
+    <span class="tab-index">01</span> Consolidate — Many → One
+  </button>
+  <button class="tab" data-tab="distribute" role="tab" aria-selected="false">
+    <span class="tab-index">02</span> Distribute — One → Many
+  </button>
+</nav>
+
+<main class="workspace">
+
+  <!-- ============ CONSOLIDATE PANEL ============ -->
+  <section class="panel" id="panel-consolidate">
+
+    <div class="panel-block">
+      <h2>Destination</h2>
+      <p class="hint">Every source wallet below will send its balance here.</p>
+      <input type="text" id="c-destination" class="input mono" placeholder="Destination wallet address" />
+    </div>
+
+    <div class="panel-block">
+      <h2>Asset</h2>
+      <div class="segmented" id="c-asset-toggle">
+        <button class="seg active" data-asset="sol">SOL</button>
+        <button class="seg" data-asset="spl">SPL Token</button>
+      </div>
+      <input type="text" id="c-mint" class="input mono hidden" placeholder="Token mint address" />
+      <label class="checkbox-row hidden" id="c-leave-row">
+        <input type="checkbox" id="c-leave-rent" checked />
+        Leave ~0.001 SOL in each source wallet for fees / rent-exemption
+      </label>
+    </div>
+
+    <div class="panel-block">
+      <h2>Sources</h2>
+      <div class="sub-tabs">
+        <button class="sub-tab active" data-sub="wallet">Wallet-by-wallet <span class="badge-rec">recommended</span></button>
+        <button class="sub-tab" data-sub="keys">Import keys <span class="badge-warn">advanced / local only</span></button>
+      </div>
+
+      <!-- wallet-by-wallet -->
+      <div class="sub-panel" id="sub-wallet">
+        <p class="hint">Connect each source wallet in your extension one at a time, then add it to the sweep list. You'll be asked to reconnect and re-sign for each wallet individually — nothing is shared between them.</p>
+        <div class="row-gap">
+          <button class="btn btn-secondary" id="c-add-source">+ Add currently connected wallet</button>
+        </div>
+        <table class="table" id="c-source-table">
+          <thead><tr><th>#</th><th>Address</th><th>Balance</th><th>Status</th><th></th></tr></thead>
+          <tbody id="c-source-body"></tbody>
+        </table>
+        <button class="btn btn-primary full" id="c-sweep-wallets" disabled>Sweep sources one by one →</button>
+      </div>
+
+      <!-- import keys -->
+      <div class="sub-panel hidden" id="sub-keys">
+        <div class="warning-box">
+          <strong>Local-only, non-custodial signing.</strong> Keys you paste below are parsed and used to sign transactions entirely in your browser tab — they are never sent anywhere, logged, or stored after you close/reload the page. Even so: only paste keys for wallets <em>you</em> control, prefer burner/dust wallets over your main cold wallet, and rehearse on Devnet first. Anyone who could read this browser tab (malicious extension, shoulder-surfing, a compromised machine) could read these keys.
+        </div>
+        <textarea id="c-key-input" class="textarea mono" rows="5" placeholder="One secret key per line — base58 string or JSON byte array, e.g.&#10;4NX...your key...&#10;[12,45,201,...]"></textarea>
+        <div class="row-gap">
+          <button class="btn btn-secondary" id="c-load-keys">Load &amp; check balances</button>
+        </div>
+        <table class="table" id="c-key-table">
+          <thead><tr><th>#</th><th>Address</th><th>Balance</th><th>Status</th></tr></thead>
+          <tbody id="c-key-body"></tbody>
+        </table>
+        <div class="confirm-row hidden" id="c-confirm-row">
+          <label>Type <code>SWEEP</code> to arm the button:</label>
+          <input type="text" id="c-confirm-text" class="input mono small" placeholder="SWEEP" />
+        </div>
+        <button class="btn btn-danger full" id="c-sweep-keys" disabled>Sweep all local wallets now</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DISTRIBUTE PANEL ============ -->
+  <section class="panel hidden" id="panel-distribute">
+
+    <div class="panel-block">
+      <h2>Signer</h2>
+      <p class="hint">The wallet connected above pays and signs every batch. Funds leave from that wallet only.</p>
+    </div>
+
+    <div class="panel-block">
+      <h2>Asset</h2>
+      <div class="segmented" id="d-asset-toggle">
+        <button class="seg active" data-asset="sol">SOL</button>
+        <button class="seg" data-asset="spl">SPL Token</button>
+      </div>
+      <input type="text" id="d-mint" class="input mono hidden" placeholder="Token mint address" />
+    </div>
+
+    <div class="panel-block">
+      <h2>Recipients</h2>
+      <p class="hint">One per line: <code>address,amount</code>. Or upload a two-column CSV (address,amount).</p>
+      <textarea id="d-recipients" class="textarea mono" rows="6" placeholder="7c3f...abcd,0.5&#10;9pQk...19zR,1.25"></textarea>
+      <div class="row-gap">
+        <label class="btn btn-secondary file-btn">
+          Upload CSV
+          <input type="file" id="d-csv-upload" accept=".csv,text/csv" class="hidden-input" />
+        </label>
+        <button class="btn btn-secondary" id="d-parse">Parse &amp; preview</button>
+      </div>
+    </div>
+
+    <div class="panel-block" id="d-preview-block" style="display:none">
+      <h2>Preview</h2>
+      <table class="table" id="d-preview-table">
+        <thead><tr><th>#</th><th>Address</th><th>Amount</th><th>Valid</th></tr></thead>
+        <tbody id="d-preview-body"></tbody>
+      </table>
+      <div class="summary-row" id="d-summary"></div>
+      <div class="row-gap">
+        <button class="btn btn-secondary" id="d-simulate">Simulate first batch</button>
+        <button class="btn btn-primary" id="d-send" disabled>Send distribution →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SHARED LEDGER ============ -->
+  <aside class="ledger">
+    <div class="ledger-head">
+      <h2>Ledger</h2>
+      <button class="btn-mini" id="ledger-clear">clear</button>
+    </div>
+    <div class="ledger-body" id="ledger-body">
+      <div class="ledger-empty">No activity yet. Actions and transaction signatures will be logged here as they happen.</div>
+    </div>
+  </aside>
+
+</main>
+
+<footer class="foot">
+  <p>Runs entirely client-side. No backend, no analytics on your keys or amounts, no custody of funds. Always rehearse on Devnet before mainnet. Not affiliated with Solana Labs or Phantom.</p>
+</footer>
+
+<div class="toast-stack" id="toast-stack"></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
